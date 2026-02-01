@@ -9,3 +9,9 @@ node_modules/
 
 # Ignoring VS Code settings
 .vscode/
+
+# Local development certificates
+.certs/
+
+# Ignore macOS generated files
+.DS_Store

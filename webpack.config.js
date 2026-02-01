@@ -48,7 +48,7 @@ const NON_LOCAL_ICONS = [];
 
 for(const entry of glob.sync('./src/**/index.{js,jsx}')) {
 	const folder = getFolderName(entry);
-	
+
 	// Try to read the manifest.
 	const fname = path.join(path.dirname(entry), 'manifest.json');
 	let json;
@@ -58,22 +58,22 @@ for(const entry of glob.sync('./src/**/index.{js,jsx}')) {
 		console.warn(`Unable to read manifest for file: ${entry}`);
 		continue;
 	}
-	
+
 	if ( ! DEV_BUILD && ! json.enabled )
 		continue;
-	
+
 	delete json.enabled;
 	json.id = folder;
-	
+
 	if ( ! json.icon && fs.existsSync(path.join(path.dirname(entry), 'logo.png')) )
 		json.icon = `${FILE_PATH}${json.id}/logo.png`;
-	
+
 	else if ( ! json.icon && fs.existsSync(path.join(path.dirname(entry), 'logo.jpg')) )
 		json.icon = `${FILE_PATH}${json.id}/logo.jpg`;
-	
+
 	else if ( json.icon )
 		NON_LOCAL_ICONS.push(folder);
-	
+
 	ENTRIES[`${folder}/script`] = `./${entry}`;
 	MANIFESTS[folder] = json;
 }
@@ -94,17 +94,17 @@ const config = {
 	devtool: DEV_BUILD
 		? 'inline-source-map'
 		: 'source-map',
-	
+
 	resolve: {
 		extensions: ['.js', '.jsx']
 	},
-	
+
 	target: ['web', TARGET],
-	
+
 	node: false,
 
 	entry: ENTRIES,
-	
+
 	externals: [
 		({request}, callback) => {
 			if ( request === 'vue' )
@@ -112,7 +112,7 @@ const config = {
 			return callback();
 		}
 	],
-	
+
 	output: {
 		chunkFormat: 'array-push',
 		clean: true,
@@ -126,7 +126,7 @@ const config = {
 		chunkLoadingGlobal: 'ffzAddonsWebpackJsonp',
 		crossOriginLoading: 'anonymous'
 	},
-	
+
 	optimization: {
 		minimizer: [
 			new EsbuildPlugin({
@@ -135,7 +135,7 @@ const config = {
 			})
 		]
 	},
-	
+
 	plugins: [
 		new CycloneDxWebpackPlugin({
 			specVersion: '1.6',
@@ -179,7 +179,7 @@ const config = {
 			generate: () => Object.values(MANIFESTS)
 		})
 	],
-	
+
 	module: {
 		rules: [
 			// Register method replace to include the addon's name
@@ -193,7 +193,7 @@ const config = {
 						let folder = path.relative(this.rootContext, path.dirname(this.resource));
 						if ( folder.startsWith('src\\') || folder.startsWith('src/') )
 							folder = folder.substring(4);
-						
+
 						const manifest = MANIFESTS[folder];
 						if (!manifest)
 							return `.register();`;
@@ -213,7 +213,7 @@ const config = {
 						let folder = path.relative(this.rootContext, path.dirname(this.resource));
 						if ( folder.startsWith('src\\') || folder.startsWith('src/') )
 							folder = folder.split(path.sep)[1];
-						
+
 						const manifest = MANIFESTS[folder];
 						return JSON.stringify(manifest?.version ?? '0.0.0-unknown');
 					}
@@ -229,7 +229,7 @@ const config = {
 						let folder = path.relative(this.rootContext, path.dirname(this.resource));
 						if ( folder.startsWith('src\\') || folder.startsWith('src/') )
 							folder = folder.substring(4);
-						
+
 						const out = `import(/* webpackChunkName: "${folder}/${extension}" */ "./${filename}.${extension}")`;
 						//console.log(`Replacing import: "${match}" with "${out}"`);
 						return out;
@@ -300,43 +300,59 @@ const config = {
 	}
 };
 
-if ( DEV_SERVER )
+if ( DEV_SERVER ) {
+	// Use dotnet dev-certs if available
+	const certPath = path.join(__dirname, '.certs', 'localhost.pem');
+	const keyPath = path.join(__dirname, '.certs', 'localhost-key.pem');
+
+	let serverConfig = 'https';
+	if (fs.existsSync(certPath) && fs.existsSync(keyPath)) {
+		serverConfig = {
+			type: 'https',
+			options: {
+				key: fs.readFileSync(keyPath),
+				cert: fs.readFileSync(certPath)
+			}
+		};
+	}
+
 	config.devServer = {
 		client: false,
 		webSocketServer: false,
 		liveReload: false,
 		hot: false,
-		
-		server: 'https',
+
+		server: serverConfig,
 		port: 8001,
 		compress: true,
-		
+
 		allowedHosts: [
 			'.twitch.tv',
 			'.frankerfacez.com'
 		],
-		
+
 		devMiddleware: {
 			publicPath: '/script/addons/',
 		},
-		
+
 		setupMiddlewares: (middlewares, devServer) => {
-			
+
 			devServer.app.get('/script/addons.json', (req, res) => {
 				res.setHeader('Access-Control-Allow-Origin', '*');
 				res.setHeader('Access-Control-Allow-Private-Network', 'true');
 				res.redirect('/script/addons/addons.json');
 			});
-			
+
 			middlewares.unshift((req, res, next) => {
 				res.setHeader('Access-Control-Allow-Origin', '*');
 				res.setHeader('Access-Control-Allow-Private-Network', 'true');
 				next();
 			});
-			
+
 			return middlewares.filter(middleware => middleware.name !== 'cross-origin-header-check');
 		}
 	};
+}
 
 
 module.exports = config;
